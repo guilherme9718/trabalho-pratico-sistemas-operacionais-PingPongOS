@@ -6,6 +6,18 @@
 // Coloque aqui as suas modificações, p.ex. includes, defines variáveis, 
 // estruturas e funções
 
+int task_getprio (task_t *task) {
+    if(task)
+        return (task->static_prio);
+    return (taskExec->static_prio);
+}
+
+void task_setprio (task_t *task, int prio) {
+    if(prio > 20 || prio < -20)
+        return;
+    if(task)
+        task->static_prio = prio;
+}
 
 // ****************************************************************************
 
@@ -34,6 +46,8 @@ void before_task_create (task_t *task ) {
 
 void after_task_create (task_t *task ) {
     // put your customization here
+    task->static_prio = 0;
+    task->dinamic_prio = 0;
 #ifdef DEBUG
     printf("\ntask_create - AFTER - [%d]", task->id);
 #endif
@@ -397,11 +411,26 @@ int after_mqueue_msgs (mqueue_t *queue) {
 }
 
 task_t * scheduler() {
-    // FCFS scheduler
-    if ( readyQueue != NULL ) {
-        return readyQueue;
+    int size = queue_size((queue_t*)readyQueue);
+    task_t *iter = readyQueue;
+    task_t *maiort = NULL;
+    int maior = -99;
+    int i=size;
+    int iter_prio;
+    while((iter != NULL) && (i > 0)) {
+        iter->dinamic_prio++;
+        iter_prio = iter->static_prio + iter->dinamic_prio;
+
+        if(iter_prio > maior) {
+            maior = iter_prio;
+            maiort = iter;
+        }
+        iter = iter->next;
+        i--;
     }
-    return NULL;
+
+    maiort->dinamic_prio--;
+    return maiort;
 }
 
 
