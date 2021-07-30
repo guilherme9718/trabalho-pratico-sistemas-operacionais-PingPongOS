@@ -17,21 +17,14 @@ struct sigaction action ;
 // estrutura de inicialização to timer
 struct itimerval timer ;
 
+//devolve a prioridade estática da tarefa, caso o ponteiro seja nulo devolve a prioridade da tarefa em execução
 int task_getprio (task_t *task) {
     if(task)
         return (task->static_prio);
     return (taskExec->static_prio);
 }
 
-//Compara a prioridade dinâmica de duas tarefas.
-//se t1 tiver uma prioridade dinâmica maior que t2 retorna 1, caso contrario retorna 0 
-int task_compare(task_t *t1, task_t *t2) {
-    if((t1->static_prio + t1->dinamic_prio) > (t2->static_prio + t2->dinamic_prio))
-        return 1;
-    else 
-        return 0;
-}
-
+// altera a prioridade estática da tarefa (só é possível valores entre -20 e 20)
 void task_setprio (task_t *task, int prio) {
     if(!task)
         return;
@@ -41,6 +34,7 @@ void task_setprio (task_t *task, int prio) {
     task->static_prio = prio;
 }
 
+// trata as interrumpções de tempo incrementando o tempo do sistema e verificando o quantum da tarefa
 void tratador_tempo(int signum) {
     systemTime++;
     taskExec->quantum--;
@@ -116,10 +110,8 @@ void after_task_create (task_t *task ) {
 
     //inicializa metricas sobre a tarefa
     task->executionTimeStart = systemTime;
-    //task->executionTimeEnd = systemTime;
     task->processorTime = 0;
     task->processorTimeStart = 0;
-    //task->processorTimeEnd = 0;
     task->activations = 0;
 
 #ifdef DEBUG
@@ -136,7 +128,7 @@ void before_task_exit () {
 
 void after_task_exit () {
     // put your customization here
-    //taskExec->executionTimeEnd = systemTime;
+    //obtem o tempo de execução da tarefa
     unsigned int execT = systemTime - taskExec->executionTimeStart;
     printf("Task %d exit: execution time %u ms, processor time %u ms, %u activations\n", taskExec->id, execT, taskExec->processorTime, taskExec->activations);
 #ifdef DEBUG
@@ -162,15 +154,16 @@ void after_task_switch ( task_t *task ) {
 
 void before_task_yield () {
     // put your customization here
-    //taskExec->quantum = QUANTUM;
 #ifdef DEBUG
     printf("\ntask_yield - BEFORE - [%d]", taskExec->id);
 #endif
 }
 void after_task_yield () {
     // put your customization here
+    // reseta o quantum da tarefa
     taskExec->quantum = QUANTUM;
 
+    // obtem o tempo de processamento da tarefa
     taskExec->processorTime += systemTime - taskExec->processorTimeStart;
 #ifdef DEBUG
     printf("\ntask_yield - AFTER - [%d]", taskExec->id);
@@ -187,7 +180,8 @@ void before_task_suspend( task_t *task ) {
 
 void after_task_suspend( task_t *task ) {
     // put your customization here
-    //taskExec->processorTimeEnd = systemTime;
+
+    // obtem o tempo de processamento da tarefa
     taskExec->processorTime += systemTime - taskExec->processorTimeStart;
 #ifdef DEBUG
     printf("\ntask_suspend - AFTER - [%d]", task->id);
@@ -196,7 +190,6 @@ void after_task_suspend( task_t *task ) {
 
 void before_task_resume(task_t *task) {
     // put your customization here
-    //task->quantum = QUANTUM;
 #ifdef DEBUG
     printf("\ntask_resume - BEFORE - [%d]", task->id);
 #endif
