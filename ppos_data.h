@@ -26,7 +26,18 @@ typedef struct task_t
 
    // ... (outros campos deve ser adicionados APOS esse comentario)
    int static_prio; // armazena a prioridade estatica da tarefa
-   int dinamic_prio; // armazena a prioridade ganhada por envelhecimento 
+   int dinamic_prio; // armazena a prioridade ganhada por envelhecimento
+   unsigned char privilegio; // 1 se o privilegio for de usuario e 0 se o privilegio for de sistema
+
+   //metricas da tarefa
+   unsigned int executionTimeStart;
+   //unsigned int executionTimeEnd;
+   unsigned int processorTime;
+   unsigned int processorTimeStart;
+   //unsigned int processorTimeEnd;
+   unsigned int activations;
+
+   int quantum; // tempo de processamento em milissegundos
 } task_t ;
 
 // estrutura que define um semáforo

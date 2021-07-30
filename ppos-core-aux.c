@@ -5,6 +5,17 @@
 // ****************************************************************************
 // Coloque aqui as suas modificações, p.ex. includes, defines variáveis, 
 // estruturas e funções
+//#define DEBUG
+#define QUANTUM 50
+
+#include <signal.h>
+#include <sys/time.h>
+
+// estrutura que define um tratador de sinal (deve ser global ou static)
+struct sigaction action ;
+
+// estrutura de inicialização to timer
+struct itimerval timer ;
 
 int task_getprio (task_t *task) {
     if(task)
@@ -12,13 +23,31 @@ int task_getprio (task_t *task) {
     return (taskExec->static_prio);
 }
 
-void task_setprio (task_t *task, int prio) {
-    if(prio > 20 || prio < -20)
-        return;
-    if(task)
-        task->static_prio = prio;
+//Compara a prioridade dinâmica de duas tarefas.
+//se t1 tiver uma prioridade dinâmica maior que t2 retorna 1, caso contrario retorna 0 
+int task_compare(task_t *t1, task_t *t2) {
+    if((t1->static_prio + t1->dinamic_prio) > (t2->static_prio + t2->dinamic_prio))
+        return 1;
+    else 
+        return 0;
 }
 
+void task_setprio (task_t *task, int prio) {
+    if(!task)
+        return;
+    if(prio > 20 || prio < -20)
+        return;
+
+    task->static_prio = prio;
+}
+
+void tratador_tempo(int signum) {
+    systemTime++;
+    taskExec->quantum--;
+    if(taskExec->quantum <= 0 && taskExec->privilegio && preemption) {
+        task_yield();
+    }
+}
 // ****************************************************************************
 
 
@@ -32,6 +61,32 @@ void before_ppos_init () {
 
 void after_ppos_init () {
     // put your customization here
+    taskDisp->privilegio = 0;
+    preemption = 0;
+    // registra a ação para o sinal de timer SIGALRM
+    systemTime = 0;
+    action.sa_handler = tratador_tempo ;
+    sigemptyset (&action.sa_mask) ;
+    action.sa_flags = 0 ;
+    if (sigaction (SIGALRM, &action, 0) < 0)
+    {
+        perror ("Erro em sigaction: ") ;
+        exit (1) ;
+    }
+
+    // ajusta valores do temporizador
+    timer.it_value.tv_usec = 1000 ;      // primeiro disparo, em micro-segundos
+    timer.it_value.tv_sec  = 0 ;      // primeiro disparo, em segundos
+    timer.it_interval.tv_usec = 1000 ;   // disparos subsequentes, em micro-segundos
+    timer.it_interval.tv_sec  = 0 ;   // disparos subsequentes, em segundos
+
+    // arma o temporizador ITIMER_REAL (vide man setitimer)
+    if (setitimer (ITIMER_REAL, &timer, 0) < 0)
+    {
+        perror ("Erro em setitimer: ") ;
+        exit (1) ;
+    }
+
 #ifdef DEBUG
     printf("\ninit - AFTER");
 #endif
@@ -46,8 +101,27 @@ void before_task_create (task_t *task ) {
 
 void after_task_create (task_t *task ) {
     // put your customization here
+    //zera prioridade dinâmica e estática depois de criar a tarefa
     task->static_prio = 0;
     task->dinamic_prio = 0;
+    
+    //define o quantum padrao para a tarefa
+    task->quantum = QUANTUM;
+
+    //define o privilegio da tarefa, se esta vai ser preemptada ou não
+    task->privilegio = 1;
+    if(task == taskDisp){
+        task->privilegio = 0;
+    }
+
+    //inicializa metricas sobre a tarefa
+    task->executionTimeStart = systemTime;
+    //task->executionTimeEnd = systemTime;
+    task->processorTime = 0;
+    task->processorTimeStart = 0;
+    //task->processorTimeEnd = 0;
+    task->activations = 0;
+
 #ifdef DEBUG
     printf("\ntask_create - AFTER - [%d]", task->id);
 #endif
@@ -62,6 +136,9 @@ void before_task_exit () {
 
 void after_task_exit () {
     // put your customization here
+    //taskExec->executionTimeEnd = systemTime;
+    unsigned int execT = systemTime - taskExec->executionTimeStart;
+    printf("Task %d exit: execution time %u ms, processor time %u ms, %u activations\n", taskExec->id, execT, taskExec->processorTime, taskExec->activations);
 #ifdef DEBUG
     printf("\ntask_exit - AFTER- [%d]", taskExec->id);
 #endif
@@ -76,6 +153,8 @@ void before_task_switch ( task_t *task ) {
 
 void after_task_switch ( task_t *task ) {
     // put your customization here
+    task->activations++;
+    task->processorTimeStart = systemTime;
 #ifdef DEBUG
     printf("\ntask_switch - AFTER - [%d -> %d]", taskExec->id, task->id);
 #endif
@@ -83,12 +162,16 @@ void after_task_switch ( task_t *task ) {
 
 void before_task_yield () {
     // put your customization here
+    //taskExec->quantum = QUANTUM;
 #ifdef DEBUG
     printf("\ntask_yield - BEFORE - [%d]", taskExec->id);
 #endif
 }
 void after_task_yield () {
     // put your customization here
+    taskExec->quantum = QUANTUM;
+
+    taskExec->processorTime += systemTime - taskExec->processorTimeStart;
 #ifdef DEBUG
     printf("\ntask_yield - AFTER - [%d]", taskExec->id);
 #endif
@@ -104,6 +187,8 @@ void before_task_suspend( task_t *task ) {
 
 void after_task_suspend( task_t *task ) {
     // put your customization here
+    //taskExec->processorTimeEnd = systemTime;
+    taskExec->processorTime += systemTime - taskExec->processorTimeStart;
 #ifdef DEBUG
     printf("\ntask_suspend - AFTER - [%d]", task->id);
 #endif
@@ -111,6 +196,7 @@ void after_task_suspend( task_t *task ) {
 
 void before_task_resume(task_t *task) {
     // put your customization here
+    //task->quantum = QUANTUM;
 #ifdef DEBUG
     printf("\ntask_resume - BEFORE - [%d]", task->id);
 #endif
@@ -118,6 +204,9 @@ void before_task_resume(task_t *task) {
 
 void after_task_resume(task_t *task) {
     // put your customization here
+    task->quantum = QUANTUM;
+    task->activations++;
+    task->processorTimeStart = systemTime;
 #ifdef DEBUG
     printf("\ntask_resume - AFTER - [%d]", task->id);
 #endif
@@ -411,25 +500,34 @@ int after_mqueue_msgs (mqueue_t *queue) {
 }
 
 task_t * scheduler() {
+    //Pega tamanho da lista de tarefas prontas
     int size = queue_size((queue_t*)readyQueue);
+
     task_t *iter = readyQueue;
     task_t *maiort = NULL;
+
     int maior = -99;
     int i=size;
     int iter_prio;
-    while((iter != NULL) && (i > 0)) {
-        iter->dinamic_prio++;
-        iter_prio = iter->static_prio + iter->dinamic_prio;
 
+    //itera sobre todas as tarefas da lista de prontas
+    while((iter != NULL) && (i > 0)) {
+        //aumenta o envelhecimento das tarefas
+        iter->dinamic_prio++;
+        iter_prio = iter->static_prio + iter->dinamic_prio; //prioridade dinâmica
+
+        //escolhe a tarefa com maior prioridade, se houver empate, escolhe a primeira da fila
         if(iter_prio > maior) {
             maior = iter_prio;
             maiort = iter;
         }
+        //incrementa o iterador
         iter = iter->next;
         i--;
     }
 
-    maiort->dinamic_prio--;
+    //zera a prioridade da tarefa que será executada
+    maiort->dinamic_prio = 0;
     return maiort;
 }
 
