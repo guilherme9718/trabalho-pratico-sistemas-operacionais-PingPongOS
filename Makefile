@@ -8,5 +8,9 @@ contab:
 	gcc -o contab-prio ppos-core-aux.c  pingpong-contab-prio.c libppos_static.a
 clean:
 	rm preempcao escalonador escalonador-stress contab-prio
+disco1:
+	gcc -o disco-1 ppos-core-aux.c ppos_disk.h ppos_disk.c libppos_static.a pingpong-disco1.c -lrt
+disco2:
+	gcc -o disco-2 ppos-core-aux.c ppos_disk.h ppos_disk.c libppos_static.a pingpong-disco2.c -lrt
 
-.PHONY: all preempcao escalonador stress contab
+.PHONY: all preempcao escalonador stress contab disco1 disco2

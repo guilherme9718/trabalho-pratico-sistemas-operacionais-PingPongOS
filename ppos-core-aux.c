@@ -10,6 +10,8 @@
 
 #include <signal.h>
 #include <sys/time.h>
+#include "ppos_disk.h"
+//#define DEBUG_DISK 1
 
 // estrutura que define um tratador de sinal (deve ser global ou static)
 struct sigaction action ;
@@ -36,6 +38,7 @@ void task_setprio (task_t *task, int prio) {
 
 // trata as interrumpções de tempo incrementando o tempo do sistema e verificando o quantum da tarefa
 void tratador_tempo(int signum) {
+    //preemption=0;
     systemTime++;
     taskExec->quantum--;
     if(taskExec->quantum <= 0 && taskExec->privilegio && preemption) {
@@ -128,6 +131,10 @@ void before_task_exit () {
 
 void after_task_exit () {
     // put your customization here
+    if(taskExec == taskMain) {
+        disk.init = 0;
+        mutex_unlock(&disk.queue_mutex);
+    }
     //obtem o tempo de execução da tarefa
     unsigned int execT = systemTime - taskExec->executionTimeStart;
     printf("Task %d exit: execution time %u ms, processor time %u ms, %u activations\n", taskExec->id, execT, taskExec->processorTime, taskExec->activations);
@@ -493,6 +500,11 @@ int after_mqueue_msgs (mqueue_t *queue) {
 }
 
 task_t * scheduler() {
+    #ifdef FCFS_SCHED
+    if(readyQueue) {
+        return readyQueue;
+    }
+    #endif
     //Pega tamanho da lista de tarefas prontas
     int size = queue_size((queue_t*)readyQueue);
 

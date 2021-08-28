@@ -11,12 +11,48 @@
 // a um dispositivo de entrada/saida orientado a blocos,
 // tipicamente um disco rigido.
 
+#include "disk.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include "ppos.h"
+#include "ppos-core-globals.h"
+#include <signal.h>
+#include <sys/time.h>
+#include <math.h>
+
+#define DISK_FCFS 0
+#define DISK_SSTF 1
+#define DISK_CSCAN 2
+
+typedef struct {
+  struct dreq_t *prev, *next;
+  //task_t task;
+  int cmd;
+  int block;
+  void *buffer;
+} dreq_t;
+
 // estrutura que representa um disco no sistema operacional
 typedef struct
 {
+  char init;
+  int tam;
+  int tam_block;
+  int bloco;
+  void* buffer;
+  int status;
+  task_t task;
+  dreq_t req;
+  mutex_t mutex;
+  mutex_t queue_mutex;
+  semaphore_t sem;
+  int sched;
   // completar com os campos necessarios
 } disk_t ;
 
+
+disk_t disk;
+dreq_t* disk_queue;
 // inicializacao do gerente de disco
 // retorna -1 em erro ou 0 em sucesso
 // numBlocks: tamanho do disco, em blocos
