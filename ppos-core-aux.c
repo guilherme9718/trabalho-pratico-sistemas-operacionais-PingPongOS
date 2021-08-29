@@ -133,7 +133,7 @@ void after_task_exit () {
     // put your customization here
     if(taskExec == taskMain) {
         disk.init = 0;
-        mutex_unlock(&disk.queue_mutex);
+        sem_up(&disk.vazio);
     }
     //obtem o tempo de execução da tarefa
     unsigned int execT = systemTime - taskExec->executionTimeStart;

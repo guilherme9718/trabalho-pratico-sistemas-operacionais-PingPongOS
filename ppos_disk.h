@@ -43,9 +43,11 @@ typedef struct
   int status;
   task_t task;
   dreq_t req;
-  mutex_t mutex;
+  mutex_t mrequest;
   mutex_t queue_mutex;
-  semaphore_t sem;
+  semaphore_t vazio;
+  semaphore_t cheio;
+  short pacotes;
   int sched;
   // completar com os campos necessarios
 } disk_t ;

@@ -7,7 +7,7 @@ stress:
 contab:
 	gcc -o contab-prio ppos-core-aux.c  pingpong-contab-prio.c libppos_static.a
 clean:
-	rm preempcao escalonador escalonador-stress contab-prio
+	rm preempcao escalonador escalonador-stress contab-prio disco-1 disco-2
 disco1:
 	gcc -o disco-1 ppos-core-aux.c ppos_disk.h ppos_disk.c libppos_static.a pingpong-disco1.c -lrt
 disco2:
