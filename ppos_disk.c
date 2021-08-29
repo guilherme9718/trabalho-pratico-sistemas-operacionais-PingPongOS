@@ -10,10 +10,7 @@ void gerenciadora();
 void tratador_disco(int signum) {
     disk.pacotes++;
     sem_up(&disk.cheio);
-
-    //mutex_unlock(&disk.mutex);
-    //sem_up(&disk.sem);
-    //disk_scheduler();
+    disk.tempo_exec += systemTime - disk.tempo_init;
 }
 
 // inicializacao do gerente de disco
@@ -51,6 +48,9 @@ int disk_mgr_init (int *numBlocks, int *blockSize) {
     sem_create(&disk.cheio, 0);
     sem_create(&disk.vazio, 0);
 
+    disk.blocos_percorridos = 0;
+    disk.tempo_exec = 0;
+
     disk.pacotes = 0;
 
     disk_queue = NULL;
@@ -68,8 +68,6 @@ int disk_mgr_init (int *numBlocks, int *blockSize) {
     task_create(&disk.task, gerenciadora, NULL);
     disk.task.privilegio = 0;
     
-    //printf("Disco Inicializado com sucesso");
-    //mutex_lock(&disk.mutex);
     return 0;
 }
 
@@ -81,10 +79,9 @@ int disk_request(int block, void *buffer, int cmd) {
     request->buffer = buffer;
     request->cmd = cmd;
 
-    //mutex_lock(&disk.queue_mutex);
+    mutex_lock(&disk.queue_mutex);
     queue_append((queue_t**)&disk_queue, (queue_t*)request);
-    //mutex_unlock(&disk.queue_mutex);
-    //printf("queue_size = %d\n", queue_size((queue_t**)disk_queue));
+    mutex_unlock(&disk.queue_mutex);
 
     return 0;
 }
@@ -92,42 +89,24 @@ int disk_request(int block, void *buffer, int cmd) {
 
 void gerenciadora() {
     while(disk.init == 1) {
-        //mutex_unlock(&disk.queue_mutex);
         sem_down(&disk.vazio);
         disk_scheduler();
-        //mutex_lock(&disk.queue_mutex);
-        //task_suspend(&disk.task, &sleepQueue);
         
     }
+    printf("Numero de blocos percorridos %d\nTempo de execução do disco %d ms\n", 
+    disk.blocos_percorridos, disk.tempo_exec);
     task_exit(0);
 }
 
 // leitura de um bloco, do disco para o buffer
 int disk_block_read (int block, void *buffer) {
-    // if(disk_cmd(DISK_CMD_STATUS, 0, 0) != DISK_STATUS_IDLE) {
-    //     task_join(&disk.task);
-    //     printf("Disco ocupado\n");
-    //     return -1;
-    // }
-    // disk_request(block, buffer, DISK_CMD_READ);
-
-    // disk.bloco = block;
-    // disk.buffer = buffer;
-
-    // int result = disk_cmd(DISK_CMD_READ, disk.bloco, disk.buffer);
-    // if(result != 0) {
-    //     printf("Falha ao ler o bloco %d\n", disk.bloco);
-    //     return;
-    // } 
-    // else {
-    //     mutex_lock(&disk.mutex);
-    // }
-
-    //mutex_lock(&disk.mutex);
     int cmd = DISK_CMD_READ;
+    
+    disk_request(block, buffer, cmd);
+    
     mutex_lock(&disk.mrequest);
 
-    disk_request(block, buffer, cmd);
+    
     if(disk.pacotes == 0) {
         sem_up(&disk.vazio);
         sem_down(&disk.cheio);
@@ -135,11 +114,6 @@ int disk_block_read (int block, void *buffer) {
     disk.pacotes--;
     
     mutex_unlock(&disk.mrequest);
-
-    //task_create(&disk.task, disk_scheduler, NULL);
-    //disk.task.privilegio = 0;
-    //task_join(&disk.task);
-    //disk_scheduler();
     return 0;
 }
 
@@ -147,29 +121,13 @@ int disk_block_read (int block, void *buffer) {
 
 // escrita de um bloco, do buffer para o disco
 int disk_block_write (int block, void *buffer) {
-    // mutex_lock(&disk.mutex);
-    // disk.status = disk_cmd(DISK_CMD_STATUS, 0, 0);
-    // if(disk.status != DISK_STATUS_IDLE) {
-    //     printf("disk_status = %d\n", disk.status);
-    //     return -1;
-    // }
-
-    // disk.bloco = block;
-    // disk.buffer = buffer;
-
-    // int result = disk_cmd(DISK_CMD_WRITE, disk.bloco, disk.buffer);
-    // if(result != 0) {
-    //     printf("Falha ao ler o bloco %d\n", disk.bloco);
-    //     return -1;
-    // }
-
-    // return 0;
-    
-
     int cmd = DISK_CMD_WRITE;
+    
+    //coloca tarefa na fila para acessar o disco
+    disk_request(block, buffer, cmd);
+
     mutex_lock(&disk.mrequest);
 
-    disk_request(block, buffer, cmd);
     if(disk.pacotes == 0) {
         sem_up(&disk.vazio);
         sem_down(&disk.cheio);
@@ -177,15 +135,6 @@ int disk_block_write (int block, void *buffer) {
     disk.pacotes = 0;
     
     mutex_unlock(&disk.mrequest);
-    //mutex_lock(&disk.mutex);
-    // disk_request(block, buffer, DISK_CMD_WRITE);
-    // mutex_unlock(&disk.queue_mutex);
-    // sem_down(&disk.sem);
-    //task_resume(&disk.task);
-    //task_create(&disk.task, disk_scheduler, NULL);
-    //disk.task.privilegio = 0;
-    //task_join(&disk.task);
-    //disk_scheduler(disk.sched);
 
     return 0;
 }
@@ -284,18 +233,17 @@ int disk_scheduler() {
     void *req_buffer = req->buffer;
     int req_cmd = req->cmd;
     
-    //mutex_lock(&disk.queue_mutex);
     aux = (dreq_t*)queue_remove((queue_t**)&disk_queue, (queue_t*)req);
     free(req);
-    //mutex_unlock(&disk.queue_mutex);
 
     
     disk.status = disk_cmd(DISK_CMD_STATUS, 0, 0);
     if(disk.status != DISK_STATUS_IDLE) {
         printf("disk_status = %d\n", disk.status);
-        //sem_up(&disk.sem);
         return -1;
     }
+    disk.tempo_init = systemTime;
+    disk.blocos_percorridos += abs(req_block - disk.bloco);
 
     disk.bloco = req_block;
     disk.buffer = req_buffer;
@@ -303,12 +251,8 @@ int disk_scheduler() {
     int result = disk_cmd(req_cmd, disk.bloco, disk.buffer);
     if(result != 0) {
         printf("Falha ao ler/escrever o bloco %d %d %p %d %d\n", disk.bloco, result, disk.buffer, disk.tam, disk.status);
-        //sem_up(&disk.sem);
+        sem_up(&disk.cheio);
         return -1;
     }
-    else {
-        //mutex_lock(&disk.mutex);
-    }
-    
-    //task_exit(0);
+
 }

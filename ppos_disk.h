@@ -49,6 +49,10 @@ typedef struct
   semaphore_t cheio;
   short pacotes;
   int sched;
+
+  int tempo_init;
+  int blocos_percorridos;
+  int tempo_exec;
   // completar com os campos necessarios
 } disk_t ;
 
