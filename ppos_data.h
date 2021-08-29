@@ -4,6 +4,14 @@
 
 // Estruturas de dados internas do sistema operacional
 
+/* Implementação feita por
+Guilherme Aguilar de Oliveira
+RA 2127953
+
+Samuel Leal Valentin
+RA 2023989
+*/
+
 #ifndef __PPOS_DATA__
 #define __PPOS_DATA__
 
